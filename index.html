@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>Hakikat Payı — Video Oluşturucu</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;background:#0b0b0b;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+body{padding:16px;padding-bottom:calc(22px + env(safe-area-inset-bottom))}
+.app{max-width:760px;margin:auto}
+h1{font-size:20px;margin:4px 0 14px}
+.controls{display:grid;gap:10px}
+textarea,input,button{width:100%;font:inherit;border-radius:12px;border:1px solid #393939;background:#171717;color:#fff;padding:13px}
+textarea{min-height:120px;resize:vertical}
+button{background:#fff;color:#000;border:0;font-weight:700;min-height:48px}
+button:disabled{opacity:.45}
+.small{font-size:12px;color:#aaa;line-height:1.45}
+.status{font-size:14px;min-height:22px}
+.previewBox{margin-top:18px;display:flex;justify-content:center}
+canvas{display:block;width:min(100%,540px);height:auto;background:#000}
+video{display:none;width:min(100%,540px);margin:14px auto 0;background:#000}
+.actions{display:none;gap:10px;margin-top:10px}
+.actions.show{display:grid}
+a.save{display:block;text-align:center;text-decoration:none;background:#fff;color:#000;padding:13px;border-radius:12px;font-weight:700}
+</style>
+</head>
+<body>
+<main class="app">
+<h1>Hakikat Payı — 15 sn Video</h1>
+<div class="controls">
+<textarea id="quote" placeholder="Sözü yaz...">İnsanlar, sevdikleri kişiyi incitmek konusunda korktukları kişiyi incitmekten daha az çekinirler.</textarea>
+<input id="author" value="Niccolò Machiavelli" placeholder="Yazar / kişi">
+<input id="work" value="Prens, XVII" placeholder="Eser / kaynak (isteğe bağlı)">
+<button id="make">15 saniyelik videoyu oluştur</button>
+<div class="status" id="status"></div>
+<div class="small">1080×1080 • siyah zemin • beyaz serif yazı • 15 saniye. iPhone/Safari destekliyorsa MP4; aksi durumda tarayıcının desteklediği video biçimi kullanılır.</div>
+</div>
+<div class="previewBox"><canvas id="canvas" width="1080" height="1080"></canvas></div>
+<video id="result" controls playsinline></video>
+<div class="actions" id="actions"><a class="save" id="save">Videoyu Kaydet / Paylaş</a></div>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+const q=$("#quote"), a=$("#author"), w=$("#work"), c=$("#canvas"), ctx=c.getContext("2d");
+const btn=$("#make"), status=$("#status"), result=$("#result"), actions=$("#actions"), save=$("#save");
+let currentURL=null;
+
+function wrap(text,maxWidth){
+  const words=text.trim().split(/\s+/), lines=[]; let line="";
+  for(const word of words){
+    const test=line ? line+" "+word : word;
+    if(ctx.measureText(test).width<=maxWidth) line=test;
+    else { if(line) lines.push(line); line=word; }
+  }
+  if(line) lines.push(line);
+  return lines;
+}
+function draw(){
+  const W=1080,H=1080;
+  ctx.fillStyle="#000";ctx.fillRect(0,0,W,H);
+  ctx.fillStyle="#fff";ctx.textAlign="center";ctx.textBaseline="middle";
+  const quote="“"+q.value.trim()+"”";
+  let fs=72, lines=[];
+  while(fs>=42){
+    ctx.font=`400 ${fs}px Georgia, "Times New Roman", serif`;
+    lines=wrap(quote,W*.84);
+    const qh=lines.length*fs*1.12;
+    const sh=(a.value.trim()?52:0)+(w.value.trim()?48:0)+55;
+    if(qh+sh<=H*.70) break;
+    fs-=2;
+  }
+  const lh=fs*1.12, qh=lines.length*lh;
+  const after=(a.value.trim()||w.value.trim())?155:0;
+  let y=H/2-(qh+after)/2+lh/2;
+  ctx.font=`400 ${fs}px Georgia, "Times New Roman", serif`;
+  for(const line of lines){ctx.fillText(line,W/2,y);y+=lh}
+  y+=55;
+  if(a.value.trim()){
+    ctx.font='400 36px Georgia, "Times New Roman", serif';
+    ctx.fillText("— "+a.value.trim(),W/2,y); y+=52;
+  }
+  if(w.value.trim()){
+    ctx.font='italic 36px Georgia, "Times New Roman", serif';
+    ctx.fillText(w.value.trim(),W/2,y);
+  }
+}
+[q,a,w].forEach(el=>el.addEventListener("input",draw)); draw();
+
+function chooseMime(){
+  if(!window.MediaRecorder) return null;
+  const types=[
+    "video/mp4;codecs=avc1.42E01E",
+    "video/mp4",
+    "video/webm;codecs=vp9",
+    "video/webm;codecs=vp8",
+    "video/webm"
+  ];
+  for(const t of types){
+    try{ if(MediaRecorder.isTypeSupported(t)) return t; }catch(e){}
+  }
+  return "";
+}
+
+btn.addEventListener("click", async ()=>{
+  if(!q.value.trim()) return;
+  draw();
+  if(!c.captureStream || !window.MediaRecorder){
+    status.textContent="Bu Safari sürümü tarayıcı içinde video üretimini desteklemiyor.";
+    return;
+  }
+  const mime=chooseMime();
+  if(mime===null){status.textContent="Bu tarayıcı MediaRecorder desteklemiyor.";return;}
+  btn.disabled=true; actions.classList.remove("show"); result.style.display="none";
+  status.textContent="Video hazırlanıyor… 15 saniye.";
+  const stream=c.captureStream(30);
+  let rec;
+  try{
+    rec=mime ? new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:6000000})
+             : new MediaRecorder(stream,{videoBitsPerSecond:6000000});
+  }catch(e){
+    btn.disabled=false; status.textContent="Bu cihaz seçilen video biçimini oluşturamadı."; return;
+  }
+  const chunks=[];
+  rec.ondataavailable=e=>{if(e.data && e.data.size) chunks.push(e.data)};
+  rec.onerror=()=>{btn.disabled=false;status.textContent="Video oluşturulurken hata oluştu."};
+  rec.onstop=()=>{
+    const actual=rec.mimeType || mime || "video/mp4";
+    const blob=new Blob(chunks,{type:actual});
+    if(currentURL) URL.revokeObjectURL(currentURL);
+    currentURL=URL.createObjectURL(blob);
+    result.src=currentURL; result.style.display="block";
+    const isMp4=actual.includes("mp4");
+    save.href=currentURL;
+    save.download="hakikat-payi-15sn."+(isMp4?"mp4":"webm");
+    actions.classList.add("show");
+    status.textContent=isMp4 ? "Hazır — MP4 oluşturuldu." : "Hazır — cihazın desteklediği video biçimi oluşturuldu.";
+    btn.disabled=false;
+  };
+  rec.start(250);
+  setTimeout(()=>{if(rec.state!=="inactive") rec.stop()},15000);
+});
+</script>
+</body>
+</html>
